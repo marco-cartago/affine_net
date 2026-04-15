@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from typing import Tuple
 
-from InvertibleModules.utils import freeze_weights, triangular_xavier_norm_
+from InvertibleModules.utils import *
 
 
 class LUBlock(torch.nn.Module):
@@ -20,14 +20,12 @@ class LUBlock(torch.nn.Module):
         # Init L and U matrices
         self.L = torch.nn.Parameter(torch.empty(dim, dim, dtype=dtype))
         self.U = torch.nn.Parameter(torch.empty(dim, dim, dtype=dtype))
-
-        # Initialize both matrices with random gaussian weights from N(0, 1)
-        # then L and U are rendered respectively lower and upper diagonal
-        # matrices with a constant diagonal of ones.
-        # That side of the matrix is then freezed and is not allowed to change
-
         L_mask, _ = triangular_xavier_norm_(self.L, upper=False)
         U_mask, _ = triangular_xavier_norm_(self.U, upper=True)
+
+        # L, U, L_mask, U_mask = triang_QR_gen_((dim, dim), dtype=dtype)
+        # self.L = torch.nn.Parameter(L)
+        # self.U = torch.nn.Parameter(U)
 
         self.L_hook = freeze_weights(self.L, L_mask)
         self.W_hook = freeze_weights(self.U, U_mask)
@@ -50,6 +48,7 @@ class LUBlock(torch.nn.Module):
             scale = torch.log(torch.abs(self.scale))
             x = torch.mul(x, scale)
 
+        # (self.L @ self.U @ x.unsqueeze(dim=-1)).squeeze(-1)
         xp = torch.matmul(
             self.L,
             torch.matmul(self.U, x.unsqueeze(dim=-1))
