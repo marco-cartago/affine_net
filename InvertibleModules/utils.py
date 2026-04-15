@@ -39,15 +39,29 @@ def triangular_xavier_norm_(
 
     return mask, indices
 
+def triang_QR_gen_(size: Tuple[int], dtype: torch.dtype) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
 
-# torch.nn.init.normal_(W)
-# rows, cols = W.size()
+    W = torch.empty(size=size, dtype=dtype)
+    rows, cols = W.size()
 
-# if upper:
-#     fanouts = torch.arange(cols - 1, -1, -1).unsqueeze(0)
-# else:
-#     fanouts = torch.arange(0, cols).unsqueeze(0)
+    torch.nn.init.xavier_normal_(W)
+    Q, _ = torch.linalg.qr(W,mode='complete')
+    _, L, U = torch.linalg.lu(Q)
 
-# fanins = torch.ones(rows) * rows
-# var_estim = torch.sqrt(4 / (fanins + fanouts.T))
-# W = W * var_estim
+    trl_rows, trl_cols = torch.tril_indices(rows, cols)
+    tru_rows, tru_cols = torch.triu_indices(rows, cols)
+
+    with torch.no_grad():
+        L[tru_rows, tru_cols] = 0.0
+        L += torch.eye(rows)
+        U[tru_rows, tru_cols] = 0.0
+        U += torch.eye(rows)
+
+    L_mask = torch.ones_like(L)
+    L_mask[tru_rows, tru_cols] = 0.0
+    U_mask = torch.ones_like(U)
+    U_mask[tru_rows, tru_cols] = 0.0
+
+    return L, U, L_mask, U_mask
+
+
