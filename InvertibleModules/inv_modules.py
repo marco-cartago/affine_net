@@ -45,7 +45,7 @@ class LUBlock(torch.nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
 
         if self.scale is not None:
-            scale = torch.log(torch.abs(self.scale))
+            scale = self.scale
             x = torch.mul(x, scale)
 
         # (self.L @ self.U @ x.unsqueeze(dim=-1)).squeeze(-1)
@@ -73,7 +73,7 @@ class LUBlock(torch.nn.Module):
         x = x.squeeze(-1)
 
         if self.scale is not None:
-            scale = torch.log(torch.abs(self.scale))
+            scale = self.scale
             x = x / scale
 
         return x

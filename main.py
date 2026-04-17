@@ -8,10 +8,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 
+import sys
+from sklearn.decomposition import PCA
+from mpl_toolkits.mplot3d import Axes3D
+
 from sklearn.metrics import classification_report
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 from networks import *
+from data import *
 
 def train(
     max_epochs: int,
@@ -40,7 +45,7 @@ def train(
 
             if i == 0 or i % 10 == 0:
                 print(
-                    f'Epoch {epoch}, Batch {i}, Loss {loss.item():.4e}',
+                    f'Epoch {str(epoch).zfill(3)}, Batch {str(i).zfill(3)}, Loss {loss.item():.4e}, η {scheduler.get_lr()[0]:.4e} ',
                     end='\r'
                 )
 
@@ -48,9 +53,11 @@ def train(
         mean_loss = total_loss/len(train_loader)
         losses[epoch] = mean_loss
         
-        print(" "*90, end="\r")
+        if epoch == max_epochs - 1:
+            print(" "*90, end="\r")
+        
         print(
-            f'Epoch {epoch}, Loss {mean_loss:.4e}',
+            f'Epoch {str(epoch).zfill(3)}, Loss {mean_loss:.4e}',
             end='\r'
         )
     
@@ -94,67 +101,22 @@ def test(
 
     return accuracy
 
-def make_spiral(
-    n_per_class: int = 500,
-    noise: float = 0.1,
-    turns: float = 3.0,
-    device: torch.device | str = "cpu",
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Generate a 2-D two-class spiral (the classic “two-spiral” toy problem).
-
-    Args
-    ----
-    n_per_class: number of points per class (total = 2 * n_per_class).
-    noise: standard deviation of Gaussian noise added to each point.
-    turns: how many revolutions each spiral makes (default 3).
-    device: torch device for the returned tensors.
-
-    Returns
-    -------
-    x: Tensor of shape (2*n_per_class, 2) - the coordinates.
-    y: Tensor of shape (2*n_per_class, 2) - one-hot class labels (float).
-
-    """
-    # Angles
-    theta = torch.linspace(0, turns * math.pi, n_per_class, device=device)
-    r = theta
-
-    x0 = torch.stack([r * torch.cos(theta), r * torch.sin(theta)], dim=1)
-    x1 = torch.stack([r * torch.cos(theta + math.pi), r *
-                     torch.sin(theta + math.pi)], dim=1)
-
-    x = torch.cat([x0, x1], dim=0)
-
-    # Add Gaussian noise
-    if noise > 0:
-        x += torch.randn_like(x) * noise
-
-    # Labels
-    labels = torch.cat([
-        torch.zeros(n_per_class, dtype=torch.long, device=device),
-        torch.ones(n_per_class, dtype=torch.long, device=device)
-    ], dim=0)
-
-    y = F.one_hot(labels, num_classes=2).float()
-
-    return x, y
 
 def train_network_dummy(DEVICE):
 
-    torch.manual_seed(0)
+    torch.manual_seed(96)
 
     print(f"Device {DEVICE}")
 
     # Parameters
-    n = 2_000
+    n = 1_000
     dim = 2
     scale = 1
     seed = 0
     a = 4.5
 
-    pad_dim = 7
-    n_blocks = 5
+    pad_dim = 4
+    n_blocks = 4
     sl = 0.125
 
     epochs = 2000
@@ -173,7 +135,7 @@ def train_network_dummy(DEVICE):
     ).to(DEVICE)
 
     # Dataset and train test split initialization
-    x, y = make_spiral(n_per_class=n, noise=0.8, turns=6.22)
+    x, y = make_spiral(n_per_class=n, noise=0.4, turns=4.22)
     x /= (torch.amax(x) - torch.amin(x))
 
     dataset = TensorDataset(x, y)
@@ -269,13 +231,99 @@ def test_invertibility(luNet, dim, scale, DEVICE):
     print(m)
 
 
+def show_path(net: AffineNet, scale=1, dim=2):
+
+    n = 500
+    x, y = make_spiral(n_per_class=n, noise=0.8, turns=4.22)
+    x /= (torch.amax(x) - torch.amin(x))
+
+    cols_tru = y.to('cpu').detach().numpy()
+    cols_tru = 0.9 * np.hstack(
+        (cols_tru, 0.2 * np.ones((1, cols_tru.shape[0])).T)
+    )
+
+    layer_approx = []
+
+    for l in net.network_modules:
+        x = l(x)
+        a = x.to('cpu').detach().numpy()
+        layer_approx.append(a)
+
+    traces = np.stack(layer_approx[0:-1])
+    print(traces.shape)
+
+    l, n, d = traces.shape
+
+
+    fig, ax = plt.subplots(d, d, figsize=(15, 15))
+    for i in np.random.permutation(range(0, n)):
+        for v1 in range(0, d):
+            for v2 in range(v1, d):
+                ax[v1,v2].plot(
+                    traces[:, i, v1], 
+                    traces[:, i, v2], 
+                    c=cols_tru[i], alpha=0.2)
+
+    plt.show()
+
+
+def show_path_pca(net: AffineNet, n_samples=200, pca_dim=2):
+
+    x, y = make_spiral(n_per_class=n_samples, noise=0.5, turns=4.22)
+    x = x / (torch.max(x) - torch.min(x))
+
+    # colour for each point (RGBA)
+    cols = y.cpu().numpy()
+    cols = 0.9 * np.hstack((cols, 0.2 * np.ones((cols.shape[0], 1))))
+
+    activations = []
+    for layer in net.network_modules[0:-1]:
+        x = layer(x)
+        activations.append(x.detach().cpu().numpy())
+
+    pcs = []                              
+    for act in activations:
+        pca = PCA(n_components=pca_dim)
+        pcs.append(pca.fit_transform(act))
+
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111) #projection='3d')
+
+    # each sample follows a line through the layers
+    for i in np.random.permutation(range(2*n_samples)):
+        traj = np.stack([pc[i] for pc in pcs])
+        ax.plot(traj[:, 0], 
+                traj[:, 1], 
+                #traj[:, 2],
+                color=cols[i], alpha=0.2)
+
+        ax.scatter(traj[-1, 0], 
+                   traj[-1, 1], 
+                   #traj[:, 2],
+                   color=cols[i], alpha=0.8)
+
+
+    plt.show()
+
+
 if __name__ == "__main__":
 
     print("="*90)
 
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    params = train_network_dummy(DEVICE)
-    test_invertibility(*params, DEVICE)
+    PATH = "./networks/net_4d.p"
+    
+    argv = sys.argv
+    if "train" in argv:
+        net, dim, scale = train_network_dummy(DEVICE)
+        torch.save(net.state_dict(), PATH)
+        test_invertibility(net, 2, 1, DEVICE)
+
+    net = AffineNet(in_features=2, out_features=2, pad_dim=4, num_blocks=4, slope=0.125)
+    net.load_state_dict(torch.load(PATH, weights_only=True))
+    net.eval()
+
+    show_path(net)
 
     print("="*90)
     exit()
