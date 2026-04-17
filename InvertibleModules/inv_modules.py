@@ -74,7 +74,7 @@ class LUBlock(torch.nn.Module):
 
         if self.scale is not None:
             scale = self.scale
-            x = x / scale
+            x = torch.div(x, scale)
 
         return x
 

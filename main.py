@@ -310,6 +310,8 @@ if __name__ == "__main__":
 
     print("="*90)
 
+    torch.manual_seed(96)
+
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     PATH = "./networks/net_4d.p"
     
@@ -319,11 +321,18 @@ if __name__ == "__main__":
         torch.save(net.state_dict(), PATH)
         test_invertibility(net, 2, 1, DEVICE)
 
-    net = AffineNet(in_features=2, out_features=2, pad_dim=4, num_blocks=4, slope=0.125)
+    net = AffineNet(
+        in_features=2, 
+        out_features=2, 
+        pad_dim=4, 
+        num_blocks=4, 
+        slope=0.125
+    )
+    
     net.load_state_dict(torch.load(PATH, weights_only=True))
     net.eval()
 
-    show_path(net)
+    show_path_pca(net)
 
     print("="*90)
     exit()
