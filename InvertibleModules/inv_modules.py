@@ -79,6 +79,40 @@ class LUBlock(torch.nn.Module):
         return x
 
 
+class TwoChan(torch.nn.Module):
+    """
+    Simple reversible two-channel block.
+
+    * `F` and `G` are any callable `torch.nn.Module`s.
+    * inp/output are 2-tuples of tensors with identical shapes.
+    """
+
+    def __init__(self, F: torch.nn.Module, G: torch.nn.Module):
+        super().__init__()               # initialise nn.Module
+        self.F = F
+        self.G = G
+
+    def forward(self, inps: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+        
+        i1, i2 = inps
+        if i1.shape != i2.shape:
+            raise ValueError("i1 and i2 must have the same shape")
+
+        o2 = i2 + self.F(i1)             
+        o1 = i1 + self.G(o2)             
+        return o1, o2
+
+    def inverse(self, outputs: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+        
+        o1, o2 = outputs
+        if o1.shape != o2.shape:
+            raise ValueError("i1 and i2 must have the same shape")
+
+        i1 = o1 - self.G(o2)            
+        i2 = o2 - self.F(i1)
+
+        return i1, i2
+
 class ExtendDim(torch.nn.Module):
 
     def __init__(self, pad_dims: int, dtype: torch.dtype = torch.float) -> None:
