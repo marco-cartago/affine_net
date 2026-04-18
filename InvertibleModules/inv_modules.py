@@ -78,7 +78,7 @@ class LUBlock(torch.nn.Module):
 
         if self.scale is not None:
             x = x / self.scale
-            
+
         return x
 
 
@@ -90,10 +90,10 @@ class TwoChan(torch.nn.Module):
     * inp/output are 2-tuples of tensors with identical shapes.
     """
 
-    def __init__(self, F: torch.nn.Module, G: torch.nn.Module):
-        super().__init__()               # initialise nn.Module
-        self.F = F
-        self.G = G
+    def __init__(self, f: torch.nn.Module, f: torch.nn.Module):
+        super().__init__()
+        self.f = F
+        self.g = G
 
     def forward(self, inps: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         
@@ -101,8 +101,8 @@ class TwoChan(torch.nn.Module):
         if i1.shape != i2.shape:
             raise ValueError("i1 and i2 must have the same shape")
 
-        o2 = i2 + self.F(i1)             
-        o1 = i1 + self.G(o2)             
+        o2 = i2 + self.f(i1)             
+        o1 = i1 + self.g(o2)             
         return o1, o2
 
     def inverse(self, outputs: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -111,8 +111,8 @@ class TwoChan(torch.nn.Module):
         if o1.shape != o2.shape:
             raise ValueError("i1 and i2 must have the same shape")
 
-        i1 = o1 - self.G(o2)            
-        i2 = o2 - self.F(i1)
+        i1 = o1 - self.g(o2)            
+        i2 = o2 - self.f(i1)
 
         return i1, i2
 
