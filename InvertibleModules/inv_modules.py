@@ -28,20 +28,20 @@ class LUBlock(torch.nn.Module):
         self.u = torch.nn.Parameter(torch.empty(dim, dim, dtype=dtype))
 
         # Initialise as triangular matrices (Xavier‑scaled)
-        L_mask, _ = triangular_xavier_norm_(self.l, upper=False)
-        U_mask, _ = triangular_xavier_norm_(self.u, upper=True)
+        l_mask, _ = triangular_xavier_norm_(self.l, upper=False)
+        u_mask, _ = triangular_xavier_norm_(self.u, upper=True)
 
         # Freeze non‑triangular entries
-        self.l_hook = freeze_weights(self.l, L_mask)
-        self.u_hook = freeze_weights(self.u, U_mask)
+        self.l_hook = freeze_weights(self.l, l_mask)
+        self.u_hook = freeze_weights(self.u, u_mask)
 
-        # bias 
+        # bias
         self.bias: Optional[torch.nn.Parameter] = None
         if bias:
             self.bias = torch.nn.Parameter(torch.empty(dim, dtype=dtype))
             torch.nn.init.normal_(self.bias)
 
-        # scale 
+        # scale
         self.scale: Optional[torch.nn.Parameter] = None
         if scale:
             self.scale = torch.nn.Parameter(torch.empty(dim, dtype=dtype))
@@ -66,7 +66,7 @@ class LUBlock(torch.nn.Module):
     def inverse(self, y: torch.Tensor) -> torch.Tensor:
 
         """Solve L·U·x = (y-bias)/scale for x."""
-        
+      
         if self.bias is not None:
             y = y - self.bias
 
@@ -90,10 +90,10 @@ class TwoChan(torch.nn.Module):
     * inp/output are 2-tuples of tensors with identical shapes.
     """
 
-    def __init__(self, f: torch.nn.Module, f: torch.nn.Module):
+    def __init__(self, f: torch.nn.Module, g: torch.nn.Module):
         super().__init__()
-        self.f = F
-        self.g = G
+        self.f = f
+        self.g = g
 
     def forward(self, inps: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         
