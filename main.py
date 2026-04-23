@@ -12,11 +12,15 @@ import sys
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
 
+import scipy
+from scipy.stats import gaussian_kde
+
 from sklearn.metrics import classification_report
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 from networks import *
 from data import *
+
 
 def train(
     max_epochs: int,
@@ -52,15 +56,15 @@ def train(
         scheduler.step()
         mean_loss = total_loss/len(train_loader)
         losses[epoch] = mean_loss
-        
+
         if epoch == max_epochs - 1:
             print(" "*90, end="\r")
-        
+
         print(
             f'Epoch {str(epoch).zfill(3)}, Loss {mean_loss:.4e}',
             end='\r'
         )
-    
+
     print()
 
     return losses
@@ -119,10 +123,10 @@ def train_network_dummy(DEVICE):
     n_blocks = 4
     sl = 0.125
 
-    epochs = 2000
-    batch_size = 64
+    epochs = 1500
+    batch_size = 16
     test_ratio = 0.2
-    lr = 2e-2
+    lr = 2**-7
 
     # Network initialization
     luNet = AffineNet(
@@ -152,14 +156,14 @@ def train_network_dummy(DEVICE):
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
     # Model training
-    optimizer = torch.optim.NAdam(
+    optimizer = torch.optim.Adam(
         luNet.parameters(),
         lr=lr
     )
 
     scheduler = torch.optim.lr_scheduler.StepLR(
         optimizer,
-        step_size=20,
+        step_size=30,
         gamma=0.96875,
         last_epoch=-1
     )
@@ -231,6 +235,63 @@ def test_invertibility(luNet, dim, scale, DEVICE):
     print(m)
 
 
+def plot_inverse_path(net: AffineNet, dim, n=20):
+
+    fig, ax = plt.subplots(dim, dim, figsize=(20, 20))
+    for i in np.random.permutation(range(0, n)):
+        for v1 in range(0, dim):
+            for v2 in range(v1, dim):
+                data = make_cross(n, dim, v1, v2, scale=5)
+                # data = make_line(n, dim, v1, scale=5)
+                back_map = net.inverse(data, start=7).detach().cpu().numpy()
+                ax[v1, v2].scatter(
+                    back_map[:, 0],
+                    back_map[:, 1], alpha=0.5)
+
+    plt.show()
+
+
+def show_forward_path(net, dim, n=100, internal_dim=6):
+
+    x = 2*torch.rand(n, dim) - 1
+    x, _ = make_spiral(n, 0.5, 4)
+    x /= (torch.amax(x) - torch.amin(x))
+
+    layer_approx = []
+
+    for l in net.network_modules:
+        x = l(x)
+        a = x.to('cpu').detach().numpy()
+        layer_approx.append(a)
+
+    traces = np.stack(layer_approx[0:-1])
+    print(traces.shape)
+
+    layers, _, _ = traces.shape
+    fig, ax = plt.subplots(
+        layers,
+        internal_dim,
+        figsize=(30, 20),
+        constrained_layout=True)
+
+    for l in range(layers):
+        for v in range(internal_dim):
+            try:
+                data = traces[l, :, v]
+                kde = gaussian_kde(data, bw_method=(
+                    lambda obj, fac=1/6: np.power(obj.n, -1./(obj.d+4)) * fac)
+                )
+                x_grid = np.linspace(data.min(), data.max(), 500)
+                ax[l, v].plot(x_grid, kde(x_grid), color='darkred', lw=2)
+
+            except scipy.linalg.LinAlgError as e:
+                continue
+
+            ax[l, v].set_title(f'Layer {l}, Component {v}')
+
+    plt.show()
+
+
 def show_path(net: AffineNet, scale=1, dim=2):
 
     n = 500
@@ -254,14 +315,13 @@ def show_path(net: AffineNet, scale=1, dim=2):
 
     l, n, d = traces.shape
 
-
     fig, ax = plt.subplots(d, d, figsize=(15, 15))
     for i in np.random.permutation(range(0, n)):
         for v1 in range(0, d):
             for v2 in range(v1, d):
-                ax[v1,v2].plot(
-                    traces[:, i, v1], 
-                    traces[:, i, v2], 
+                ax[v1, v2].plot(
+                    traces[:, i, v1],
+                    traces[:, i, v2],
                     c=cols_tru[i], alpha=0.2)
 
     plt.show()
@@ -281,27 +341,26 @@ def show_path_pca(net: AffineNet, n_samples=200, pca_dim=2):
         x = layer(x)
         activations.append(x.detach().cpu().numpy())
 
-    pcs = []                              
+    pcs = []
     for act in activations:
         pca = PCA(n_components=pca_dim)
         pcs.append(pca.fit_transform(act))
 
     fig = plt.figure(figsize=(12, 8))
-    ax = fig.add_subplot(111) #projection='3d')
+    ax = fig.add_subplot(111)  # projection='3d')
 
     # each sample follows a line through the layers
     for i in np.random.permutation(range(2*n_samples)):
         traj = np.stack([pc[i] for pc in pcs])
-        ax.plot(traj[:, 0], 
-                traj[:, 1], 
-                #traj[:, 2],
+        ax.plot(traj[:, 0],
+                traj[:, 1],
+                # traj[:, 2],
                 color=cols[i], alpha=0.2)
 
-        ax.scatter(traj[-1, 0], 
-                   traj[-1, 1], 
-                   #traj[:, 2],
+        ax.scatter(traj[-1, 0],
+                   traj[-1, 1],
+                   # traj[:, 2],
                    color=cols[i], alpha=0.8)
-
 
     plt.show()
 
@@ -314,7 +373,7 @@ if __name__ == "__main__":
 
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     PATH = "./networks/net_4d.p"
-    
+
     argv = sys.argv
     if "train" in argv:
         net, dim, scale = train_network_dummy(DEVICE)
@@ -322,17 +381,19 @@ if __name__ == "__main__":
         test_invertibility(net, 2, 1, DEVICE)
 
     net = AffineNet(
-        in_features=2, 
-        out_features=2, 
-        pad_dim=4, 
-        num_blocks=4, 
+        in_features=2,
+        out_features=2,
+        pad_dim=4,
+        num_blocks=4,
         slope=0.125
     )
-    
+
     net.load_state_dict(torch.load(PATH, weights_only=True))
     net.eval()
 
-    show_path_pca(net)
+    # show_path_pca(net)
+    show_forward_path(net, 2)
+    #  plot_inverse_path(net, 6)
 
     print("="*90)
     exit()

@@ -47,11 +47,9 @@ class LUBlock(torch.nn.Module):
             self.scale = torch.nn.Parameter(torch.empty(dim, dtype=dtype))
             torch.nn.init.normal_(self.scale)
 
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
         """Apply (scale)·L·U·x + bias."""
-        
+
         if self.scale is not None:
             x = x * self.scale
 
@@ -64,9 +62,8 @@ class LUBlock(torch.nn.Module):
         return xp
 
     def inverse(self, y: torch.Tensor) -> torch.Tensor:
-
         """Solve L·U·x = (y-bias)/scale for x."""
-      
+
         if self.bias is not None:
             y = y - self.bias
 
@@ -82,7 +79,7 @@ class LUBlock(torch.nn.Module):
         return x
 
 
-class TwoChan(torch.nn.Module):
+class CouplingFlow(torch.nn.Module):
     """
     Simple reversible two-channel block.
 
@@ -96,25 +93,26 @@ class TwoChan(torch.nn.Module):
         self.g = g
 
     def forward(self, inps: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
-        
+
         i1, i2 = inps
         if i1.shape != i2.shape:
             raise ValueError("i1 and i2 must have the same shape")
 
-        o2 = i2 + self.f(i1)             
-        o1 = i1 + self.g(o2)             
+        o2 = i2 + self.f(i1)
+        o1 = i1 + self.g(o2)
         return o1, o2
 
     def inverse(self, outputs: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
-        
+
         o1, o2 = outputs
         if o1.shape != o2.shape:
             raise ValueError("i1 and i2 must have the same shape")
 
-        i1 = o1 - self.g(o2)            
+        i1 = o1 - self.g(o2)
         i2 = o2 - self.f(i1)
 
         return i1, i2
+
 
 class ExtendDim(torch.nn.Module):
     """
@@ -161,6 +159,7 @@ class I_LeakyReLU(torch.nn.Module):
         mask = out < 0
         out[mask] = out[mask] / self.negative_slope
         return out
+
 
 class I_Cubic(torch.nn.Module):
 

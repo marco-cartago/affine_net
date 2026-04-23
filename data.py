@@ -49,3 +49,16 @@ def make_spiral(
     y = F.one_hot(labels, num_classes=2).float()
 
     return x, y
+
+
+def make_cross(N: int, host_dim: int, dim1: int, dim2: int, scale=1):
+    data = torch.zeros((2*N, host_dim))
+    data[0:N, dim1] = torch.linspace(-scale, scale, N)
+    data[N:, dim2] = torch.linspace(-scale, scale, N)
+    return data
+
+
+def make_line(N: int, host_dim: int, dim: int, scale=1):
+    data = torch.zeros((N, host_dim))
+    data[:, dim] = torch.linspace(-scale, scale, N)
+    return data
